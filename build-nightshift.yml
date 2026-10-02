@@ -1,0 +1,78 @@
+name: Build NIGHT SHIFT APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android
+        uses: android-actions/setup-android@v3
+
+      - name: Extract game
+        run: |
+          mkdir game
+          unzip -q "android-horror-game-development (1).zip" -d game
+
+      - name: Install dependencies
+        working-directory: game
+        run: |
+          npm ci
+          npm install @capacitor/core @capacitor/cli @capacitor/android
+
+      - name: Build web app
+        working-directory: game
+        run: npm run build
+
+      - name: Create Android project
+        working-directory: game
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Set landscape mode
+        working-directory: game
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          s = s.replace(
+              "<activity",
+              '<activity android:screenOrientation="sensorLandscape" android:configChanges="orientation|screenSize|keyboardHidden"',
+              1
+          )
+          p.write_text(s)
+          PY
+
+      - name: Build APK
+        working-directory: game/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: NIGHT-SHIFT-APK
+          path: game/android/app/build/outputs/apk/debug/app-debug.apk
